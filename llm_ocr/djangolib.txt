@@ -1,0 +1,15 @@
+sudo apt install build-essential
+sudo apt-get install libpq-dev
+sudo apt install postgresql
+pip install psycopg2
+pip install transformers
+pip install pytorch
+pip install pillow
+pip install accelerate
+pip install pillow
+pip install celery
+pip install gunicorn
+
++
+sudo chown -R www-data:www-data .
+(celry wirte the transformers mdoel into  /var/www/.cache )
