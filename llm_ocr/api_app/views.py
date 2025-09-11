@@ -1,5 +1,6 @@
 from django.shortcuts import render
 import json
+import logging
 from django.http import JsonResponse
 # Create your views here.
 from rest_framework.views import APIView
@@ -14,22 +15,44 @@ from .models import OcrJob
 from django.db import transaction
 from api_app.tasks import analyseData
 from .serializers import OcrJobSerializer
+import signal
 
-class APISubmitOCR(APIView):        
+logger = logging.getLogger(__name__)
+
+class TimeoutException(Exception):
+    pass
+
+class APISubmitOCR(APIView):  
+    def handler(self, signum, frame):
+        raise TimeoutException()
+        
     def post(self, request, *args, **kwargs):        
         flow = request.data.get("base64_img", None)
         if flow is not None:
-            """
-            iobj=HandleImg(flow)
-            img=iobj.parse()
-            height, width, channels = img.shape
-            """
-            job=OcrJob.objects.create()
-            uuid=job.uuid
-            transaction.on_commit(lambda: analyseData.delay(uuid, flow))
-            #analyseData.delay(uuid, flow)
-            cache.clear()  
-            return Response({"job_uuid": uuid, "status": "submitted"}, status=status.HTTP_200_OK)
+            try:
+                """
+                iobj=HandleImg(flow)
+                img=iobj.parse()
+                height, width, channels = img.shape
+                """
+                signal.signal(signal.SIGALRM, self.handler)
+                signal.alarm(70)
+                job=OcrJob.objects.create()
+                uuid=job.uuid
+                logger.debug("CUSTOM_LOG database object created %s", uuid)
+                logger.debug("CUSTOM_LOG transaction and call celery (begin)")
+                transaction.on_commit(lambda: analyseData.delay(uuid, flow))
+                logger.debug("CUSTOM_LOG transaction and call celery (done, celery message sent)")
+                
+                #analyseData.delay(uuid, flow)
+                cache.clear()  
+                return Response({"job_uuid": uuid, "status": "submitted"}, status=status.HTTP_200_OK)
+            except Exception:
+                logger.error("CUSTOM_ERROR : OTHER EXCEPTION")
+                tb_str = traceback.format_exc()
+                logger.error(tb_str)
+            finally:
+                signal.alarm(0)
         cache.clear()  
         return Response({"message": "error no data received"}, status=status.HTTP_200_OK)
         

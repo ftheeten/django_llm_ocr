@@ -49,7 +49,7 @@ def analyseData(p_uuid, p_flow):
                 logger.error("CUSTOM_ERROR test is null for %s", p_uuid)                
     except SoftTimeLimitExceeded:
         self.logger.error("CUSTOM_ERROR KILL BY Celery SoftTimeLimitExceeded ",p_uuid)
-        os.kill(os.getpid(), signal.SIGTERM)
+        #os.kill(os.getpid(), signal.SIGTERM)
     except Exception:
         self.logger.error("CUSTOM_ERROR : OTHER EXCEPTION %s",p_uuid)
         tb_str = traceback.format_exc()
