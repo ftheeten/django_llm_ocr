@@ -46,7 +46,7 @@ class Launcher():
             signal.alarm(self.timeout)
             ocr_results=[]
             if self.segment:
-                segmentation=Segmentation(self.img)
+                segmentation=Segmentation(self.img, p_timeout=math.floor(self.timeout/2))
                 d_bboxes=segmentation.process()
                 self.print_time()            
                 print(d_bboxes)
@@ -77,17 +77,19 @@ class Launcher():
                 ocr=Ocr(p_timeout=math.floor(self.timeout/2)) 
                 text=ocr.process(self.img)
                 classification=None
-                if self.classify_keywords:
-                    parser=Parser() 
-                    classification=self.f_classify_keywords(parser, text)
-                    size=self.img.size
-                ocr_results.append({"text": text, "bbox":[0, 0, size[0], size[1]], "classification":classification})
+                if text is not None:
+                    if self.classify_keywords:
+                        parser=Parser(p_timeout=math.floor(self.timeout/2)) 
+                        classification=self.f_classify_keywords(parser, text)
+                        size=self.img.size
+                    ocr_results.append({"text": text, "bbox":[0, 0, size[0], size[1]], "classification":classification})
             self.print_time()
             print(ocr_results)
             print(len(ocr_results))
             signal.alarm(0) 
             return ocr_results
         except TimeoutException:
+            signal.alarm(0) 
             print("Inference timeout")
             self.print_time()   
         except Exception as e:

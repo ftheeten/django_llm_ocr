@@ -1,6 +1,7 @@
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, GenerationConfig
 from timeout import TimeoutException
 import signal
+import traceback
 
 class Ocr():  
     model_name = "Qwen/Qwen2-VL-7B-Instruct"
