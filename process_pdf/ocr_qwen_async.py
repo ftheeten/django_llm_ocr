@@ -1,11 +1,20 @@
-from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, GenerationConfig
+from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, GenerationConfig,StoppingCriteria, StoppingCriteriaList 
 import torch.multiprocessing as mp
 import torch
 from multiprocessing import Queue
 import traceback
 import os
+import time
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
+class TimeoutStoppingCriteria(StoppingCriteria):
+    def __init__(self, deadline):
+        self.deadline = deadline
+
+    def __call__(self, input_ids, scores, **kwargs):
+        import time
+        return time.time() > self.deadline
 
 class OcrQwenAsync():
     model_name="Qwen/Qwen2-VL-7B-Instruct"
@@ -16,7 +25,7 @@ class OcrQwenAsync():
         self.prompt_2=p_prompt_2
         self.max_tokens=p_max_tokens
         
-    def run_model(self, image, queue):        
+    def run_model(self, image, queue, p_timeout):        
         processor = AutoProcessor.from_pretrained(OcrQwenAsync.model_name)
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             OcrQwenAsync.model_name, torch_dtype="auto", device_map=OcrQwenAsync.device_type
@@ -42,7 +51,9 @@ class OcrQwenAsync():
         text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
         inputs = processor(text=[text_prompt], images=[image], padding=True, return_tensors="pt")
         inputs=inputs.to(OcrQwenAsync.device_type)
-        output_ids = model.generate(**inputs, max_new_tokens=self.max_tokens, generation_config=generation_config,do_sample=False)
+        deadline = time.time() + p_timeout 
+        criteria = StoppingCriteriaList([TimeoutStoppingCriteria(deadline)])
+        output_ids = model.generate(**inputs, max_new_tokens=self.max_tokens, generation_config=generation_config,do_sample=False,stopping_criteria=criteria)
         generated_ids = [output_ids[len(input_ids) :] for input_ids, output_ids in zip(inputs.input_ids, output_ids)]
         text, = processor.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
         print(text)
@@ -53,7 +64,7 @@ class OcrQwenAsync():
     
     def process(self, p_cv_img, p_time_out=60): 
         q = Queue()
-        p = mp.Process(target=self.run_model, args=(p_cv_img, q,))
+        p = mp.Process(target=self.run_model, args=(p_cv_img, q,p_time_out, ))
         p.start()
         
         try:

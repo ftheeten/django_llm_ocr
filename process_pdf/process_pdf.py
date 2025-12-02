@@ -17,10 +17,12 @@ import json
 from pathlib import Path
 
 SRC_PDF="PremierePartie1a21700_p1_10.pdf"
+NO_SEGMENT=True
 SEGMENT_ALL=True
 OUTPUT_FOLDER_IMG="./output/images"
 OUTPUT_FOLDER_TEXT="./output/text"
 DELIMIT_TEXT=False
+GO_GRAY=False
 MAX_WIDTH=1250
 
 
@@ -178,7 +180,7 @@ def segment_per_page(p_bboxes, w, p_segment=10, pad_up=False, pad_down=False, pa
     return returned
 
 def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
-    global OUTPUT_FOLDER_IMG, OUTPUT_FOLDER_TEXT, MAX_WIDTH, DELIMIT_TEXT
+    global OUTPUT_FOLDER_IMG, OUTPUT_FOLDER_TEXT, MAX_WIDTH, DELIMIT_TEXT, NO_SEGMENT, SEGMENT_ALL,GO_GRAY
     try:
         lock.acquire()
         output_folder_img_pdf=OUTPUT_FOLDER_IMG+"/"+p_file_name_img
@@ -186,9 +188,11 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
         Path(output_folder_text_pdf).mkdir(parents=True, exist_ok=True) 
         Path(output_folder_img_pdf).mkdir(parents=True, exist_ok=True) 
         
-        file_name_img=p_file_name_img+"_"+str(p_page_index)
+        file_name_img=p_file_name_img+"_"+(str(p_page_index).rjust(4, '0'))
         image=p_page_image
         h, w, _=image.shape
+        h_original=h
+        w_original=w
         r=1
         if MAX_WIDTH is not None:
             if MAX_WIDTH>0 and w>MAX_WIDTH:
@@ -203,7 +207,7 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
         results["document"]=p_file_name_img
         results["results"]={}
         
-        if flag_remove and not SEGMENT_ALL:
+        if (flag_remove and not SEGMENT_ALL) or NO_SEGMENT:
             results_tmp={}
             results_tmp["mode"]="full_image"
             results_tmp["segment"]=None
@@ -224,6 +228,9 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
                 print(file_name_page)
                 cv2.imwrite(file_name_page,cropped )
                 ocr=OcrQwenAsync( p_max_tokens=8092)
+                if GO_GRAY:
+                    cropped=cv2.cvtColor(cropped, cv2.COLOR_RGB2GRAY)
+                    cropped=cv2.cvtColor(cropped, cv2.COLOR_GRAY2RGB)
                 text_latex=ocr.process(cropped, 120)
                 print(text_latex)
                 text_raw=LatexNodes2Text().latex_to_text(text_latex)
@@ -253,9 +260,9 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
             lock2 = threading.Lock()
             try:                
                 image_source=image.copy()
-                
-                image=cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-                image=cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+                if GO_GRAY:
+                    image=cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+                    image=cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
                 bboxes=[]
                 try:
                     lock2.acquire()
@@ -311,6 +318,8 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
                             
                             results_tmp["mode"]="segmented"
                             results_tmp["segment"]=i_seg
+                            results_tmp["image_size_original"]=[0, h_original, 0, w_original]
+                            results_tmp["image_size_acquisition"]=[0, h, 0, w]
                             results_tmp["bbox"]=[y1_1, y2_1, x1_1, x2_1]
                             file_name_page=os.path.join(output_folder_img_pdf, file_name_img+"_"+str(i_seg)+".jpg")
                             print(file_name_page)
@@ -329,6 +338,8 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
                         else:
                             results_tmp["mode"]="segmented"
                             results_tmp["segment"]=i_seg
+                            results_tmp["image_size_original"]=[0, h_original, 0, w_original]
+                            results_tmp["image_size_acquisition"]=[0, h, 0, w]
                             results_tmp["bbox"]=[y1_1, y2_1, x1_1, x2_1]
                             results_tmp["text_latex"]=None
                             results_tmp["text_raw"]=None
@@ -337,6 +348,8 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
                         i_seg=i_seg+1
                     except TimeoutError as e:
                         print("OCR Timeout:", e)
+                        results_tmp["image_size_original"]=[0, h_original, 0, w_original]
+                        results_tmp["image_size_acquisition"]=[0, h, 0, w]
                         results_tmp["text_latex"]=None
                         results_tmp["text_raw"]=None
                         results_tmp["status"]="timeout"
@@ -344,6 +357,8 @@ def process_page(p_page_image, p_page_index, p_file_name_img, lock ):
                         #sys.exit()
                     except Exception:
                         print(traceback.format_exc())
+                        results_tmp["image_size_original"]=[0, h_original, 0, w_original]
+                        results_tmp["image_size_acquisition"]=[0, h, 0, w]
                         results_tmp["text_latex"]=None
                         results_tmp["text_raw"]=None
                         results_tmp["status"]="exception"
@@ -389,11 +404,7 @@ if __name__ == "__main__":
                 image=pix_to_image(pix)
                 #cv2.imshow("", image)
                 #cv2.waitKey()
-                process_page(image, i, file_name_pdf, lock)
-                
-                
-                    
-                
+                process_page(image, i, file_name_pdf, lock)          
             except Exception:
                 print("EXCEPTION_AT_PDF_LEVEL")
                 print(traceback.format_exc())
