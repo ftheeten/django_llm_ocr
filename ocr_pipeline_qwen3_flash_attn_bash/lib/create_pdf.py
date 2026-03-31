@@ -1,6 +1,7 @@
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.colors import Color
+from reportlab.pdfbase.pdfmetrics import stringWidth
 import cv2
 import os
 import io
@@ -75,7 +76,20 @@ class CreatePdfPanaf():
         print(f"{max_line_size=}")
         return max_line_size
         
+    def optimize_font_size(self, p_font, p_size, p_max_w, p_text):
+        width = stringWidth(p_text, p_font, p_size)
+        if  width<p_max_w:
+            return p_size
+        else:
+            for i in range(p_size, 1, -1):
+                width = stringWidth(p_text, p_font, i)
+                if  width<p_max_w:
+                    return i
+            return 1 
+        return p_size
+        
     def draw_text(self, p_canvas, p_data, p_font_to_pixel_ratio, p_height, p_width, p_max_line_height, p_rescale_size_ratio=1.0):        
+        font="Courier"
         for data in p_data:
             box=data["box"]
             text=data["result"]
@@ -95,13 +109,32 @@ class CreatePdfPanaf():
             print(p_rescale_size_ratio)
             font_size=line_height*p_rescale_size_ratio*p_font_to_pixel_ratio 
             font_size=min(font_size, p_max_line_height)
-            str_y=left*p_rescale_size_ratio
-            str_y=max(str_y,10)
-            str_x=math.floor(p_height)-(top*p_rescale_size_ratio)-(line_height*p_rescale_size_ratio)
-            p_canvas.setFont("Courier", font_size)  
+            str_x=left*p_rescale_size_ratio
+            str_x=max(str_x,10)
+            if top==0:
+                str_y=p_height
+            else:
+                str_y=math.floor(p_height)-(top*p_rescale_size_ratio)-(line_height*p_rescale_size_ratio)
+            print(f"{str_x=} {str_y=}")
+            
             print(str_x)
-            sys.exit()
-            p_canvas.drawString( int(str_y), int(str_x) ,text)
+            if "\n" in text:
+                tobj=p_canvas.beginText( int(str_x), int(str_y))
+                tmp=text.split("\n")
+                #tmp_size=font_size
+                sizes=[]
+                for t in tmp:
+                    s=self.optimize_font_size(font, font_size,p_width, t)
+                    sizes.append(s)
+                tmp_size=min(sizes)
+                p_canvas.setFont(font, tmp_size)
+                for t in tmp:
+                    tobj.textLine(t)
+                p_canvas.drawText( tobj)    
+            else:
+                tmp_size=self.optimize_font_size(font, font_size,p_width, text)
+                p_canvas.setFont(font, tmp_size)  
+                p_canvas.drawString( int(str_x), int(str_y) ,text)
             print("font_size")
             print(font_size)
             print(str_y)

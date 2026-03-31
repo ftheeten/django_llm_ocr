@@ -314,7 +314,7 @@ class OCRParser():
                 print(new_dir_img_col)
                 cv2.imwrite(new_dir_img_col, img)
                 dict_tile["file"]=new_dir_img_col
-                #attention coordinate are not in the same order as segmentation column
+                #check coordinate order different from segmented
                 dict_tile["box"]["x1"]=box[0]
                 dict_tile["box"]["x2"]=box[1]
                 dict_tile["box"]["y1"]=box[2]
